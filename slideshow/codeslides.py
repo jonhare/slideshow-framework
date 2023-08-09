@@ -64,11 +64,15 @@ class TerminalSlide(__AbstractShellSlide):
 
 
 class PythonCodeREPLSlide(Slide):
-    def __init__(self, initial_script="", initial_script_file=None, **kwargs):
+    def __init__(self, initial_script="", initial_script_file=None, initial_commands=None, **kwargs):
         super().__init__(**kwargs)
+
+        if initial_commands is None:
+            initial_commands = []
 
         self.shell = None
         self.initial_script = initial_script
+        self.initial_commands = initial_commands
 
         if initial_script_file:
             with open(resource_find(initial_script_file), 'r') as file:
@@ -85,7 +89,7 @@ class PythonCodeREPLSlide(Slide):
         splitter.add_widget(ci)
         layout.add_widget(splitter)
 
-        repl = PythonREPLWidget(banner=False)
+        repl = PythonREPLWidget(banner=False, history=self.initial_commands)
         self.shell = repl.sh
         if len(self.initial_script.strip()) > 0:
             self.shell.runcode(self.initial_script)
