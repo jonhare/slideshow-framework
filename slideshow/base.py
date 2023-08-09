@@ -5,9 +5,10 @@ from PIL import Image
 from kivy.app import App
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
-from kivy.properties import ObjectProperty, BooleanProperty
+from kivy.properties import ObjectProperty, BooleanProperty, NumericProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image as kiImage
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.screenmanager import Screen, ScreenManager, NoTransition, TransitionBase
 from kivy.uix.video import Video
 
@@ -28,7 +29,7 @@ class Slide(Screen):
     ignore_keyboard = BooleanProperty(defaultvalue=False)
 
     def build(self):
-        return None
+        pass
 
     def close(self):
         pass
@@ -37,7 +38,7 @@ class Slide(Screen):
         pass
 
     def on_pre_enter(self):
-        self.add_widget(self.build())
+        self.build()
 
     def on_leave(self, *args):
         self.remove_widget(self.children[0])
@@ -55,8 +56,39 @@ class PictureSlide(Slide):
             img = kiImage(fit_mode="contain", pos=(0, 0), pos_hint={'x': 0, 'y': 0})
             img.texture = pil_to_kivy(self.image).texture
         else:
-            raise Exception("unsupported type")
-        return img
+            raise Exception("unsupported type", type(self.image))
+
+        self.add_widget(img)
+
+
+class WrapperSlide(Slide):
+    def __init__(self, background, slide, **kwargs):
+        super().__init__(**kwargs)
+
+        self.background = background
+        self.slide = slide
+        self.slide.bind(ignore_keyboard=self.setter('ignore_keyboard'))
+        self.ignore_keyboard = self.slide.ignore_keyboard
+
+    def build(self):
+        img = PictureSlide(self.background)
+        img.build()
+
+        slide = self.slide
+        slide.parent = None
+        slide.build()
+
+        layout = FloatLayout()
+        layout.add_widget(img)
+        layout.add_widget(slide)
+
+        self.add_widget(layout)
+
+    def close(self):
+        self.slide.close()
+
+    def on_key_down(self, keyboard, keycode, text, modifiers):
+        self.slide.on_key_down(keyboard, keycode, text, modifiers)
 
 
 class AudioVideoSlide(Slide):
@@ -65,11 +97,12 @@ class AudioVideoSlide(Slide):
 
         self.video = Video(source=video, fit_mode='contain', volume=volume)
         if repeat:
-            video.options = {'eos': 'loop'}
+            self.video.options = {'eos': 'loop'}
 
     def build(self):
         self.video.state = 'play'
-        return self.video
+        self.video.parent = None  # in case it was already used reset the parent
+        self.add_widget(self.video)
 
     def on_key_down(self, keyboard, keycode, text, modifiers):
         if keycode[1] == 'spacebar':
@@ -99,9 +132,44 @@ def toggle_fullscreen():
     else:
         Window.fullscreen = 0
 
+# class FixedAspectFloatLayout(FloatLayout):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#
+#         self.bind(height=self.calc_height)
+#         self.bind(parent=self.calc_height)
+#
+#     def calc_height(self, *args, **kwargs):
+#         print("width", self.width, "height",self.height)
+#         self.height = self.width * 0.5
+
+
+class ARLayout(RelativeLayout):
+    # based on https://stackoverflow.com/a/28738057
+    ratio = NumericProperty(10. / 16.)
+
+    def do_layout(self, *args):
+        for child in self.children:
+            self.apply_ratio(child)
+        super(ARLayout, self).do_layout()
+
+    def apply_ratio(self, child):
+        # ensure the child don't have specification we don't want
+        child.size_hint = None, None
+        child.pos_hint = {"center_x": .5, "center_y": .5}
+
+        # calculate the new size, ensure one axis doesn't go out of the bounds
+        w, h = self.size
+        h2 = w * self.ratio
+        if h2 > self.height:
+            w = h / self.ratio
+        else:
+            h = h2
+        child.size = w, h
+
 
 class Slideshow(App):
-    def __init__(self, slides, background_image=None, default_transition: TransitionBase = NoTransition()):
+    def __init__(self, slides, slide_width, slide_height, background_image=None, default_transition: TransitionBase = NoTransition()):
         super().__init__()
 
         self.hidden = False
@@ -110,15 +178,17 @@ class Slideshow(App):
         self.current_slide = None
         self.default_transition = default_transition
 
-        self.root = FloatLayout()
-        layout = FloatLayout()
+        self.root = ARLayout(ratio=float(slide_height)/float(slide_width))  # root layout has fixed aspect ratio within window
+
+        layout = FloatLayout()  # FloatLayout to allow overlapping bg
         self.root.add_widget(layout)
 
         if background_image is not None:
-            bg = PictureSlide(background_image).build()
+            bg = PictureSlide(background_image, pos_hint={'x': 0, 'y': 0})
+            bg.build()
             layout.add_widget(bg)
 
-        self.sm = ScreenManager()
+        self.sm = ScreenManager(pos_hint={'x': 0, 'y': 0})
         layout.add_widget(self.sm)
 
         self._keyboard = Window.request_keyboard(self._keyboard_closed, self.root, 'text')

@@ -115,7 +115,8 @@ class VideoCaptureWidget(FloatLayout):
     processor = ObjectProperty(None)
     cams = ObjectProperty([str(x) for x in MyOpenCVCamera.list_devices()])
 
-    pass
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class VideoCaptureSlide(Slide):
@@ -125,4 +126,4 @@ class VideoCaptureSlide(Slide):
         self.processor = processor
 
     def build(self):
-        return VideoCaptureWidget(processor=self.processor)
+        self.add_widget(VideoCaptureWidget(processor=self.processor))

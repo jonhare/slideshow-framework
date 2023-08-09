@@ -41,7 +41,7 @@ class __AbstractShellSlide(Slide):
 
         layout.add_widget(ci)
 
-        return layout
+        self.add_widget(layout)
 
     def text_area_on_focus(self, instance, value, *args):
         self.ignore_keyboard = value
@@ -94,7 +94,7 @@ class PythonCodeREPLSlide(Slide):
         repl.text_input.bind(focus=self.text_area_on_focus)
         layout.add_widget(repl)
 
-        return layout
+        self.add_widget(layout)
 
     def rerun_code(self, instance, value, *args):
         if value is False:
