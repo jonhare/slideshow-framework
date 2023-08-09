@@ -41,6 +41,7 @@ class Slide(Screen):
         self.build()
 
     def on_leave(self, *args):
+        self.close()
         self.remove_widget(self.children[0])
 
 
@@ -95,14 +96,16 @@ class AudioVideoSlide(Slide):
     def __init__(self, video, repeat=False, volume=1., **kwargs):
         super().__init__(**kwargs)
 
-        self.video = Video(source=video, fit_mode='contain', volume=volume)
-        if repeat:
-            self.video.options = {'eos': 'loop'}
+        self.video = video
+        self.repeat = repeat
+        self.volume = volume
 
     def build(self):
-        self.video.state = 'play'
-        self.video.parent = None  # in case it was already used reset the parent
-        self.add_widget(self.video)
+        video = Video(source=self.video, fit_mode='contain', volume=self.volume)
+        if self.repeat:
+            video.options = {'eos': 'loop'}
+        video.state = 'play'
+        self.add_widget(video)
 
     def on_key_down(self, keyboard, keycode, text, modifiers):
         if keycode[1] == 'spacebar':
@@ -116,11 +119,6 @@ class VideoSlide(AudioVideoSlide):
     def __init__(self, video, repeat=False, **kwargs):
         super().__init__(video, repeat=repeat, volume=0, **kwargs)
 
-    # def close(self):
-    #     self.cam.play = False
-    #     # self.cam._camera._device.release() #perhaps speed up release rather than waiting on gc?
-    #     self.cam.index = -1
-
 
 def set_fullscreen(fullscreen):
     Window.fullscreen = fullscreen
@@ -131,6 +129,7 @@ def toggle_fullscreen():
         Window.fullscreen = 'auto'
     else:
         Window.fullscreen = 0
+
 
 # class FixedAspectFloatLayout(FloatLayout):
 #     def __init__(self, **kwargs):
@@ -169,7 +168,8 @@ class ARLayout(RelativeLayout):
 
 
 class Slideshow(App):
-    def __init__(self, slides, slide_width, slide_height, background_image=None, default_transition: TransitionBase = NoTransition()):
+    def __init__(self, slides, slide_width, slide_height, background_image=None,
+                 default_transition: TransitionBase = NoTransition()):
         super().__init__()
 
         self.hidden = False
@@ -178,7 +178,8 @@ class Slideshow(App):
         self.current_slide = None
         self.default_transition = default_transition
 
-        self.root = ARLayout(ratio=float(slide_height)/float(slide_width))  # root layout has fixed aspect ratio within window
+        self.root = ARLayout(
+            ratio=float(slide_height) / float(slide_width))  # root layout has fixed aspect ratio within window
 
         layout = FloatLayout()  # FloatLayout to allow overlapping bg
         self.root.add_widget(layout)
