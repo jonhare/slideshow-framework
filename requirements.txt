@@ -3,3 +3,4 @@ setuptools~=68.0.0
 kivy~=2.2.1
 pygments~=2.16.0
 opencv-python~=4.8.0.74
+gestures4kivy~=0.1.3

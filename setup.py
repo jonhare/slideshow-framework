@@ -13,6 +13,7 @@ setup(
         'pillow>=10',
         'kivy>=2.2',
         'pygments>=2',
-        'opencv-python>=4.8'
+        'opencv-python>=4.8',
+        'gestures4kivy>=0.1.3'
     ]
 )

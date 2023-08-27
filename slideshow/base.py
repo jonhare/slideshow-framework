@@ -2,9 +2,12 @@ from io import BytesIO
 
 import kivy
 from PIL import Image
+from gestures4kivy import CommonGestures
+from kivy import Config
 from kivy.app import App
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
+from kivy.graphics import Color, Line
 from kivy.properties import ObjectProperty, BooleanProperty, NumericProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image as kiImage
@@ -13,6 +16,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, NoTransition, Transiti
 from kivy.uix.video import Video
 
 kivy.require('2.2.1')
+Config.set('input', 'mouse', 'mouse, disable_multitouch')
 
 
 def pil_to_kivy(canvas_img):
@@ -42,7 +46,8 @@ class Slide(Screen):
 
     def on_leave(self, *args):
         self.close()
-        self.remove_widget(self.children[0])
+        self.clear_widgets()  # remove all children; will rebuild everything with build
+        self.canvas.clear()  # clear any annotations drawn on the canvas
 
 
 class PictureSlide(Slide):
@@ -143,7 +148,7 @@ def toggle_fullscreen():
 #         self.height = self.width * 0.5
 
 
-class ARLayout(RelativeLayout):
+class ARLayout(RelativeLayout, CommonGestures):
     # based on https://stackoverflow.com/a/28738057
     ratio = NumericProperty(10. / 16.)
 
@@ -166,6 +171,28 @@ class ARLayout(RelativeLayout):
             h = h2
         child.size = w, h
 
+    def cgb_horizontal_page(self, touch, right):
+        if touch.button == 'scrollright':
+            App.get_running_app().display_next_slide()
+        elif touch.button == 'scrollleft':
+            App.get_running_app().display_prev_slide()
+
+    def cgb_drag(self, touch, x, y, delta_x, delta_y):
+        print("drag", self._gesture_state)
+        x, y = App.get_running_app().sm.current_screen.to_widget(touch.x, touch.y)
+        if 'line' not in touch.ud:
+            touch.ud['line'] = Line(points=(x, y), width=2)
+            color = Color(1, 0, 0, 1.0, mode='rgba')
+            App.get_running_app().annotations[App.get_running_app().current_slide_index].append({
+                'line': touch.ud['line'],
+                'hidden': App.get_running_app().hidden,
+                'color': color
+            })
+            App.get_running_app().sm.current_screen.canvas.add(color)
+            App.get_running_app().sm.current_screen.canvas.add(touch.ud['line'])
+        else:
+            touch.ud['line'].points += [x, y]
+
 
 class Slideshow(App):
     def __init__(self, slides, slide_width, slide_height, background_image=None,
@@ -174,6 +201,7 @@ class Slideshow(App):
 
         self.hidden = False
         self.slides = slides
+        self.annotations = [[] for _ in slides]
         self.current_slide_index = -1
         self.current_slide = None
         self.default_transition = default_transition
@@ -218,12 +246,33 @@ class Slideshow(App):
             self.toggle_hidden()
         elif keycode[1] == 'q':
             App.get_running_app().stop()
+        elif keycode[1] == 'c':
+            self.clear_annotations()
 
         self.current_slide.on_key_down(keyboard, keycode, text, modifiers)
 
         return True
 
+    def clear_annotations(self):
+        filtered = []
+        for anno in self.annotations[self.current_slide_index]:
+            if anno['hidden'] != self.hidden:
+                filtered.append(anno)
+            else:
+                self.sm.current_screen.canvas.remove(anno['color'])
+                self.sm.current_screen.canvas.remove(anno['line'])
+        self.annotations[self.current_slide_index] = filtered
+
+    def draw_annotations(self):
+        for anno in self.annotations[self.current_slide_index]:
+            if self.hidden == anno['hidden']:
+                self.sm.current_screen.canvas.add(anno['color'])
+                self.sm.current_screen.canvas.add(anno['line'])
+
     def display_next_slide(self):
+        if self.hidden:
+            return
+
         if self.current_slide_index < len(self.slides) - 1:
             self.current_slide_index += 1
             next_slide = self.slides[self.current_slide_index]
@@ -232,8 +281,12 @@ class Slideshow(App):
             else:
                 self.sm.switch_to(next_slide, transition=self.current_slide.next_transition)
             self.current_slide = next_slide
+            self.draw_annotations()
 
     def display_prev_slide(self):
+        if self.hidden:
+            return
+
         if self.current_slide_index > 0:
             self.current_slide_index -= 1
             next_slide = self.slides[self.current_slide_index]
@@ -242,6 +295,7 @@ class Slideshow(App):
             else:
                 self.sm.switch_to(next_slide, transition=self.current_slide.prev_transition)
             self.current_slide = next_slide
+            self.draw_annotations()
 
     def toggle_hidden(self):
         if self.hidden:
@@ -251,6 +305,7 @@ class Slideshow(App):
             sc.add_widget(kiImage(fit_mode='fill', color=[0, 0, 0, 1]))
             self.sm.switch_to(sc, transition=NoTransition())
         self.hidden = not self.hidden
+        self.draw_annotations()
 
     def build(self):
         return self.root
